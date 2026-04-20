@@ -25,25 +25,24 @@ export class PgQueueProducer<T> implements PlatformQueueProducer<T> {
     if (msgs.length === 0) return
 
     const key = partitionKey ?? workspace
-    const meta = JSON.stringify(ctx.extractMeta())
+    const rawMeta = ctx.extractMeta?.()
+    const meta = JSON.stringify(rawMeta ?? {})
     const topic = this.topic
     const schema = this.config.schema
     const channel = notifyChannel(schema, topic)
 
+    const insertSql =
+      `INSERT INTO "${schema}".messages (topic, partition_key, workspace, value, meta) ` +
+      'VALUES ' + msgs.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}::jsonb, $${i * 5 + 5}::jsonb)`).join(', ')
+    const insertParams: unknown[] = []
+    for (const value of msgs) {
+      insertParams.push(topic, key, workspace, JSON.stringify(value), meta)
+    }
+
     await ctx.with('send', { topic }, async () => {
       await this.sql.begin(async (tx) => {
-        const rows = msgs.map((value) => ({
-          topic,
-          partition_key: key,
-          workspace,
-          value: JSON.stringify(value),
-          meta
-        }))
-        await tx`
-          INSERT INTO ${tx(schema, 'messages')}
-          ${tx(rows, 'topic', 'partition_key', 'workspace', 'value', 'meta')}
-        `
-        await tx`SELECT pg_notify(${channel}, '')`
+        await tx.unsafe(insertSql, insertParams as any)
+        await tx.unsafe('SELECT pg_notify($1, $2)', [channel, ''])
       })
     })
   }

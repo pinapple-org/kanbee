@@ -11,6 +11,15 @@ interface MessageRow {
   meta: unknown
 }
 
+function parseJsonb (raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return raw
+  }
+}
+
 export interface ConsumerOptions {
   fromBegining?: boolean
   retryDelay?: number
@@ -90,7 +99,7 @@ export class PgQueueConsumer implements ConsumerHandle {
 
         const msg: ConsumerMessage<any> = {
           workspace: row.workspace as WorkspaceUuid,
-          value: row.value
+          value: parseJsonb(row.value)
         }
         const control: ConsumerControl = {
           pause: () => {
@@ -98,7 +107,7 @@ export class PgQueueConsumer implements ConsumerHandle {
           },
           heartbeat: async () => {}
         }
-        const meta = (row.meta as Record<string, any>) ?? {}
+        const meta = (parseJsonb(row.meta) as Record<string, any>) ?? {}
 
         let attempt = 1
         while (!this.closing) {
@@ -126,7 +135,7 @@ export class PgQueueConsumer implements ConsumerHandle {
         }
 
         if (!this.closing) {
-          await this.commitOffset(BigInt(row.id))
+          await this.commitOffset(row.id)
         }
       }
     }
@@ -147,42 +156,43 @@ export class PgQueueConsumer implements ConsumerHandle {
 
   private async resetOffsetToZero (): Promise<void> {
     const schema = this.config.schema
-    await this.sql`
-      INSERT INTO ${this.sql(schema, 'consumer_offsets')} (topic, group_id, last_id)
-      VALUES (${this.topic}, ${this.groupKey}, 0)
-      ON CONFLICT (topic, group_id) DO UPDATE SET last_id = 0, updated_at = now()
-    `
+    await this.sql.unsafe(
+      `INSERT INTO "${schema}".consumer_offsets (topic, group_id, last_id)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (topic, group_id) DO UPDATE SET last_id = 0, updated_at = now()`,
+      [this.topic, this.groupKey] as any
+    )
   }
 
   private async fetchBatch (): Promise<MessageRow[]> {
     const schema = this.config.schema
-    const rows = await this.sql<MessageRow[]>`
-      WITH cur AS (
-        SELECT COALESCE(
-          (SELECT last_id FROM ${this.sql(schema, 'consumer_offsets')}
-            WHERE topic = ${this.topic} AND group_id = ${this.groupKey}),
-          0
-        ) AS last_id
-      )
-      SELECT m.id::text AS id, m.workspace, m.value, m.meta
-      FROM ${this.sql(schema, 'messages')} m, cur
-      WHERE m.topic = ${this.topic} AND m.id > cur.last_id
-      ORDER BY m.id ASC
-      LIMIT 100
-    `
-    return rows
+    const rows = await this.sql.unsafe<MessageRow[]>(
+      `WITH cur AS (
+         SELECT COALESCE(
+           (SELECT last_id FROM "${schema}".consumer_offsets WHERE topic = $1 AND group_id = $2),
+           0
+         ) AS last_id
+       )
+       SELECT m.id::text AS id, m.workspace, m.value, m.meta
+       FROM "${schema}".messages m, cur
+       WHERE m.topic = $1 AND m.id > cur.last_id
+       ORDER BY m.id ASC
+       LIMIT 100`,
+      [this.topic, this.groupKey] as any
+    )
+    return rows as unknown as MessageRow[]
   }
 
-  private async commitOffset (lastId: bigint): Promise<void> {
+  private async commitOffset (lastId: string): Promise<void> {
     const schema = this.config.schema
-    const lastIdStr = lastId.toString()
-    await this.sql`
-      INSERT INTO ${this.sql(schema, 'consumer_offsets')} (topic, group_id, last_id)
-      VALUES (${this.topic}, ${this.groupKey}, ${lastIdStr})
-      ON CONFLICT (topic, group_id) DO UPDATE
-        SET last_id = GREATEST(${this.sql(schema, 'consumer_offsets')}.last_id, EXCLUDED.last_id),
-            updated_at = now()
-    `
+    await this.sql.unsafe(
+      `INSERT INTO "${schema}".consumer_offsets (topic, group_id, last_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (topic, group_id) DO UPDATE
+         SET last_id = GREATEST("${schema}".consumer_offsets.last_id, EXCLUDED.last_id),
+             updated_at = now()`,
+      [this.topic, this.groupKey, lastId] as any
+    )
   }
 
   private async waitForSignal (timeoutMs: number): Promise<void> {
