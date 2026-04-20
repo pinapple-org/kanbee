@@ -1,10 +1,10 @@
 {
-  "name": "@hcengineering/kafka",
+  "name": "@hcengineering/pgqueue",
   "version": "0.7.413",
   "main": "lib/index.js",
   "svelte": "src/index.ts",
   "types": "types/index.d.ts",
-  "author": "Anticrm Platform Contributors",
+  "author": "Kanbee (pinapple-org)",
   "template": "@hcengineering/node-package",
   "license": "EPL-2.0",
   "scripts": {
@@ -36,15 +36,13 @@
   },
   "dependencies": {
     "@hcengineering/core": "workspace:^0.7.413",
-    "@hcengineering/pgqueue": "workspace:^0.7.413",
     "@hcengineering/platform": "workspace:^0.7.413",
     "@hcengineering/server-core": "workspace:^0.7.413",
-    "@hcengineering/storage": "workspace:^0.7.413",
-    "kafkajs": "^2.2.4"
+    "postgres": "^3.4.7"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hcengineering/huly.server.git"
+    "url": "git+https://github.com/pinapple-org/kanbee.git"
   },
   "publishConfig": {
     "access": "public"

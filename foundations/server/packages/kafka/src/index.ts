@@ -338,12 +338,25 @@ class PlatformQueueConsumerImpl implements ConsumerHandle {
 
 /**
  * Constructs a platform queue.
+ *
+ * QUEUE_CONFIG routing:
+ *  - `postgres://` or `postgresql://` → @hcengineering/pgqueue (Postgres LISTEN/NOTIFY adapter)
+ *  - anything else → Kafka broker list (this package)
  */
 export function getPlatformQueue (serviceId: string, region?: string): PlatformQueue {
   const queueConfig = process.env.QUEUE_CONFIG ?? 'huly.local:9092'
   if (queueConfig === undefined) {
     throw new Error('Please provide queue config')
   }
+
+  if (queueConfig.startsWith('postgres://') || queueConfig.startsWith('postgresql://')) {
+    // Lazy-require so Kafka-only deployments do not need the pgqueue package on disk.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pgqueue = require('@hcengineering/pgqueue')
+    const pgConfig = pgqueue.parsePgQueueConfig(queueConfig, serviceId, region ?? process.env.REGION ?? '')
+    return pgqueue.createPgQueue(pgConfig)
+  }
+
   const config = parseQueueConfig(queueConfig, serviceId, region ?? process.env.REGION ?? '')
   return createPlatformQueue(config)
 }

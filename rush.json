@@ -553,6 +553,11 @@
       "shouldPublish": true
     },
     {
+      "packageName": "@hcengineering/pgqueue",
+      "projectFolder": "foundations/server/packages/pgqueue",
+      "shouldPublish": true
+    },
+    {
       "packageName": "@hcengineering/middleware",
       "projectFolder": "foundations/server/packages/middleware",
       "shouldPublish": true
