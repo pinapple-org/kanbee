@@ -69,6 +69,7 @@
     "@koa/cors": "^5.0.0",
     "@hcengineering/server-indexer": "workspace:^0.7.413",
     "@hcengineering/elastic": "workspace:^0.7.413",
+    "@hcengineering/meili": "workspace:^0.7.413",
     "@hcengineering/server-collaboration": "workspace:^0.7.413",
     "@hcengineering/middleware": "workspace:^0.7.413",
     "@hcengineering/server-client": "workspace:^0.7.413",

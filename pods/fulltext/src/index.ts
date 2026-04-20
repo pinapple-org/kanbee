@@ -20,6 +20,7 @@ import { initStatisticsContext, type StorageConfiguration } from '@hcengineering
 import { join } from 'path'
 
 import { createElasticAdapter } from '@hcengineering/elastic'
+import { createMeiliAdapter, isMeiliUrl } from '@hcengineering/meili'
 import { getPlatformQueue } from '@hcengineering/kafka'
 import { setMetadata } from '@hcengineering/platform'
 import { createRekoniAdapter, type FulltextDBConfiguration } from '@hcengineering/server-indexer'
@@ -74,9 +75,11 @@ if (rekoniUrl === undefined) {
   process.exit(1)
 }
 
+const fulltextFactory = isMeiliUrl(fullTextDbURL) ? createMeiliAdapter : createElasticAdapter
+
 const config: FulltextDBConfiguration = {
   fulltextAdapter: {
-    factory: createElasticAdapter,
+    factory: fulltextFactory,
     url: fullTextDbURL
   },
   contentAdapters: {
