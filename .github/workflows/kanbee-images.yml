@@ -12,16 +12,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
+      CYPRESS_INSTALL_BINARY: '0'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
     steps:
-      - name: Maximize build space
+      - name: Free disk space on runner
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 4096
-          swap-size-mb: 4096
+          root-reserve-mb: 2048
+          swap-size-mb: 8192
+          build-mount-path: ''
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
+          remove-docker-images: 'true'
 
       - name: Checkout platform
         uses: actions/checkout@v4
