@@ -21,16 +21,15 @@ jobs:
 
     steps:
       - name: Free disk space on runner
-        uses: easimon/maximize-build-space@v10
+        uses: jlumbroso/free-disk-space@main
         with:
-          root-reserve-mb: 2048
-          swap-size-mb: 8192
-          build-mount-path: ''
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: Checkout platform
         uses: actions/checkout@v4
@@ -53,16 +52,6 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building images tagged :$VERSION"
 
-      - name: Cache rush + node modules
-        uses: actions/cache@v5
-        with:
-          path: |
-            common/temp/install-run
-            common/temp/pnpm-store
-          key: ${{ runner.os }}-rush-${{ hashFiles('common/config/rush/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-rush-
-
       - name: Rush install
         run: node common/scripts/install-run-rush.js install
 
@@ -82,6 +71,32 @@ jobs:
         working-directory: dev/prod
         run: npm run package
 
+      - name: Free space before docker builds
+        shell: bash
+        run: |
+          set -e
+          echo "::group::Disk before cleanup"
+          df -h /
+          du -sh common/temp/node_modules common/temp/pnpm-store 2>/dev/null || true
+          echo "::endgroup::"
+
+          rm -rf common/temp/node_modules
+          rm -rf common/temp/pnpm-store
+          rm -rf common/temp/install-run
+
+          # Per-package node_modules and lib/ aren't needed for docker context
+          # (Dockerfiles only COPY the bundle/ output).
+          find pods packages services -mindepth 2 -maxdepth 2 \
+            -type d \( -name node_modules -o -name lib \) \
+            -prune -exec rm -rf {} + 2>/dev/null || true
+          find dev -mindepth 2 -maxdepth 2 \
+            -type d -name node_modules \
+            -prune -exec rm -rf {} + 2>/dev/null || true
+
+          echo "::group::Disk after cleanup"
+          df -h /
+          echo "::endgroup::"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -97,6 +112,7 @@ jobs:
         with:
           context: pods/server
           push: true
+          provenance: false
           tags: ghcr.io/pinapple-org/kanbee-transactor:${{ steps.version.outputs.version }}
 
       - name: Build and push workspace
@@ -104,6 +120,7 @@ jobs:
         with:
           context: pods/workspace
           push: true
+          provenance: false
           tags: ghcr.io/pinapple-org/kanbee-workspace:${{ steps.version.outputs.version }}
 
       - name: Build and push fulltext
@@ -111,6 +128,7 @@ jobs:
         with:
           context: pods/fulltext
           push: true
+          provenance: false
           tags: ghcr.io/pinapple-org/kanbee-fulltext:${{ steps.version.outputs.version }}
 
       - name: Build and push front (with Kanbee branding)
@@ -119,6 +137,7 @@ jobs:
           context: .
           file: .github/docker/Dockerfile.kanbee-front
           push: true
+          provenance: false
           tags: ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.version }}
 
       - name: Summary
