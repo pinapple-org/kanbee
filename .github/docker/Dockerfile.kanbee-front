@@ -1,0 +1,12 @@
+FROM hardcoreeng/front-base:v20250916
+WORKDIR /app
+
+COPY pods/front/bundle/bundle.js ./
+COPY pods/front/bundle/bundle.js.map ./
+COPY dev/prod/dist/ ./dist/
+
+COPY kanbee-deploy/kanbee-branding/branding.json ./dist/branding.json
+COPY kanbee-deploy/kanbee-branding/kanbee/ ./dist/kanbee/
+
+EXPOSE 8080
+CMD [ "node", "./bundle.js" ]
