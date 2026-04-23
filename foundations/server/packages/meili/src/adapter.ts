@@ -84,7 +84,10 @@ class MeiliAdapter implements FullTextAdapter {
     indexVersion: string
   ) {
     this.indexName = `${indexBaseName}_${indexVersion}`
-    this.getFulltextDocId = (w, d) => `${d}@${w}`
+    // Meili document ids only allow [a-zA-Z0-9_-] (max 511 bytes), so '@' is
+    // rejected. Underscore is unambiguous to slice back since workspace UUIDs
+    // contain hyphens. Reverse lives in `getDocId` below — keep them in sync.
+    this.getFulltextDocId = (w, d) => `${d}_${w}`
     this.getDocId = (w, f) => f.slice(0, -1 * (w.length + 1)) as Ref<Doc>
   }
 
