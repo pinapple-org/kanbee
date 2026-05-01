@@ -1,0 +1,48 @@
+{
+  "localhost:8087": {
+    "title": "Kanbee",
+    "languages": "en,pt-br",
+    "defaultLanguage": "pt-br",
+    "defaultApplication": "tracker",
+    "defaultSpace": "tracker:project:DefaultProject",
+    "defaultSpecial": "issues",
+    "lastNameFirst": "false",
+    "links": [
+      { "rel": "manifest", "href": "/kanbee/site.webmanifest" },
+      { "rel": "icon", "href": "/kanbee/favicon.svg", "type": "image/svg+xml" },
+      { "rel": "icon", "href": "/kanbee/favicon-32.svg", "sizes": "32x32", "type": "image/svg+xml" },
+      { "rel": "icon", "href": "/kanbee/favicon-16.svg", "sizes": "16x16", "type": "image/svg+xml" },
+      { "rel": "apple-touch-icon", "href": "/kanbee/apple-touch-icon.png" },
+      { "rel": "mask-icon", "href": "/kanbee/notification-icon.svg", "color": "#f8a921" }
+    ],
+    "support": {
+      "supportLink": "",
+      "reportBugLink": "",
+      "docsLink": "",
+      "privacyPolicyLink": ""
+    }
+  },
+  "app.kanbee.io": {
+    "title": "Kanbee",
+    "languages": "en,pt-br",
+    "defaultLanguage": "pt-br",
+    "defaultApplication": "tracker",
+    "defaultSpace": "tracker:project:DefaultProject",
+    "defaultSpecial": "issues",
+    "lastNameFirst": "false",
+    "links": [
+      { "rel": "manifest", "href": "/kanbee/site.webmanifest" },
+      { "rel": "icon", "href": "/kanbee/favicon.svg", "type": "image/svg+xml" },
+      { "rel": "icon", "href": "/kanbee/favicon-32.svg", "sizes": "32x32", "type": "image/svg+xml" },
+      { "rel": "icon", "href": "/kanbee/favicon-16.svg", "sizes": "16x16", "type": "image/svg+xml" },
+      { "rel": "apple-touch-icon", "href": "/kanbee/apple-touch-icon.png" },
+      { "rel": "mask-icon", "href": "/kanbee/notification-icon.svg", "color": "#f8a921" }
+    ],
+    "support": {
+      "supportLink": "",
+      "reportBugLink": "",
+      "docsLink": "",
+      "privacyPolicyLink": ""
+    }
+  }
+}

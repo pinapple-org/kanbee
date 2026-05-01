@@ -1,0 +1,144 @@
+/*
+ * Kanbee brand overlay.
+ *
+ * Hex values come from design/PALETA DE CORES (primary + secondary). Keep this
+ * file token-oriented so upstream UI components remain easy to update.
+ * Component-specific overrides should only land here when a token does not
+ * exist for the surface.
+ */
+
+* {
+  // Primary palette
+  --kanbee-orange: #f8a921;
+  --kanbee-beige:  #e5d3b3;
+  --kanbee-blue:   #2166b0;
+  --kanbee-brown:  #642714;
+
+  // Secondary palette
+  --kanbee-orange-light: #f3c26b;
+  --kanbee-beige-light:  #e6d6ca;
+  --kanbee-cyan:         #00a2e1;
+  --kanbee-red:          #9e3d2a;
+
+  // Neutral
+  --kanbee-neutral-dark: #0a0a09;
+
+  --primary-button-color: #fff;
+  --primary-button-content-color: rgba(255, 255, 255, .9);
+  --primary-button-border: rgba(255, 255, 255, .18);
+  --primary-button-outline: var(--kanbee-blue);
+  --primary-button-transparent: rgba(33, 102, 176, .18);
+  --primary-button-default: var(--kanbee-blue);
+  --primary-button-hovered: #2f7ace;
+  --primary-button-pressed: #1a508c;
+  --primary-button-focused: var(--kanbee-blue);
+
+  --button-accent-LabelColor: #fff;
+  --button-accent-IconColor: #fff;
+  --button-primary-BackgroundColor: var(--kanbee-blue);
+  --button-primary-BorderColor: rgba(255, 255, 255, .18);
+  --button-primary-hover-BackgroundColor: #2f7ace;
+  --button-primary-active-BackgroundColor: #1a508c;
+  --button-primary-loading-LabelColor: #7aaee2;
+
+  --selector-active-BackgroundColor: var(--kanbee-blue);
+  --global-accent-IconColor: var(--kanbee-blue);
+  --global-accent-TextColor: var(--kanbee-blue);
+  --global-focus-BorderColor: var(--kanbee-blue);
+  --global-higlight-Color: var(--kanbee-orange);
+  --border-talk-indication-primary: var(--kanbee-cyan);
+
+  --theme-link-color: var(--kanbee-blue);
+  --theme-editbox-focus-border: var(--kanbee-blue);
+  --theme-tablist-plain-color: var(--kanbee-blue);
+  --theme-mention-bg-color: rgba(33, 102, 176, .12);
+  --theme-mention-focused-bg-color: rgba(33, 102, 176, .22);
+  --theme-calendar-today-bgcolor: rgba(33, 102, 176, .12);
+  --theme-calendar-zone: rgba(33, 102, 176, .12);
+  --theme-inbox-notify: var(--kanbee-orange);
+  --theme-inbox-people-notify: var(--kanbee-cyan);
+  --text-editor-selected-node-background: rgba(33, 102, 176, .12);
+  --text-editor-selected-node-color: #7aaee2;
+}
+
+.theme-dark {
+  --global-primary-LinkColor: #5396db;
+  --global-accent-BackgroundColor: var(--kanbee-blue);
+  --global-subtle-BackgroundColor: rgba(33, 102, 176, .20);
+  --global-ui-hover-OverlayColor: rgba(33, 102, 176, .16);
+  --global-ui-active-OverlayColor: rgba(33, 102, 176, .22);
+  --global-ui-BackgroundColor: rgba(33, 102, 176, .08);
+  --global-ui-hover-BackgroundColor: rgba(33, 102, 176, .14);
+  --global-ui-active-BackgroundColor: rgba(33, 102, 176, .20);
+  --global-ui-highlight-BackgroundColor: rgba(248, 169, 33, .12);
+  --global-ui-hover-highlight-BackgroundColor: rgba(248, 169, 33, .18);
+  --global-surface-01-BackgroundColor: var(--kanbee-neutral-dark);
+  --global-surface-01-BorderColor: rgba(229, 211, 179, .12);
+  --global-surface-02-BorderColor: rgba(229, 211, 179, .10);
+  --global-focus-inset-BorderColor: var(--kanbee-neutral-dark);
+
+  --theme-bg-color: #11100f;
+  --theme-back-color: var(--kanbee-neutral-dark);
+  --theme-statusbar-color: var(--kanbee-neutral-dark);
+  --theme-navpanel-color: var(--kanbee-neutral-dark);
+  --theme-navpanel-hovered: rgba(229, 211, 179, .06);
+  --theme-navpanel-selected: rgba(33, 102, 176, .16);
+  --theme-navpanel-divider: rgba(229, 211, 179, .12);
+  --theme-navpanel-border: rgba(229, 211, 179, .12);
+  --theme-navpanel-icons-color: rgba(229, 211, 179, .64);
+  --theme-list-header-color: var(--kanbee-orange);
+  --theme-link-color: #5396db;
+  --theme-popup-hover: #252320;
+  --theme-tooltip-bg: #252320;
+  --tag-accent-SunshineText: var(--kanbee-orange);
+  --tag-nuance-SkyBackground: rgba(33, 102, 176, .14);
+}
+
+.theme-light {
+  --global-primary-LinkColor: #1a508c;
+  --global-accent-BackgroundColor: var(--kanbee-blue);
+  --global-subtle-BackgroundColor: rgba(229, 211, 179, .55);
+  --global-ui-hover-OverlayColor: rgba(33, 102, 176, .12);
+  --global-ui-active-OverlayColor: rgba(33, 102, 176, .18);
+  --global-ui-BackgroundColor: rgba(33, 102, 176, .07);
+  --global-ui-hover-BackgroundColor: rgba(33, 102, 176, .12);
+  --global-ui-active-BackgroundColor: rgba(33, 102, 176, .18);
+  --global-ui-highlight-BackgroundColor: rgba(248, 169, 33, .14);
+  --global-ui-hover-highlight-BackgroundColor: rgba(248, 169, 33, .22);
+  --global-focus-inset-BorderColor: #ffffff;
+
+  --theme-navpanel-selected: rgba(33, 102, 176, .12);
+  --theme-navpanel-hovered: rgba(100, 39, 20, .05);
+  --theme-link-color: #1a508c;
+  --theme-list-header-color: #8e5300;
+  --theme-calendar-today-color: #ffffff;
+  --tag-nuance-SunshineBackground: rgba(248, 169, 33, .14);
+  --tag-accent-SunshineText: #7a4600;
+  --tag-nuance-SkyBackground: rgba(33, 102, 176, .10);
+}
+
+.theme-dark.backd.paneld {
+  background: rgba(10, 10, 9, .78);
+}
+
+.theme-dark.backd.paneld::after,
+.theme-dark .panel-base.panel::after {
+  background: radial-gradient(145% 100% at 10% 0%, rgba(33, 102, 176, .42) 0%, rgba(100, 39, 20, .62) 46%, #15110f 100%);
+}
+
+.theme-dark .panel-base.panel {
+  background: rgba(100, 39, 20, .38);
+  box-shadow: -30px 1.52px 173.87px rgba(10, 10, 9, .52);
+}
+
+.theme-dark .panel-base.panel::before {
+  background: conic-gradient(
+      rgba(255, 255, 255, .18) 10%,
+      rgba(229, 211, 179, .34),
+      rgba(33, 102, 176, .48),
+      rgba(0, 162, 225, .42),
+      rgba(248, 169, 33, .24),
+      rgba(255, 255, 255, .14) 90%
+    )
+    border-box;
+}
