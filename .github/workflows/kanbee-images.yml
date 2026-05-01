@@ -2,6 +2,12 @@ name: Build Kanbee custom images
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_to_railway:
+        description: Update Railway services to the built image tag after pushing images
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,23 +43,33 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Checkout kanbee-deploy (branding assets)
-        uses: actions/checkout@v4
-        with:
-          repository: pinapple-org/kanbee-deploy
-          path: common/temp/kanbee-deploy
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
+      - name: Restore Rush pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            common/temp/pnpm-store
+            common/temp/install-run
+          key: ${{ runner.os }}-rush-pnpm-${{ hashFiles('rush.json', 'common/config/rush/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-rush-pnpm-
+
       - name: Read platform version
         id: version
         run: |
           VERSION=$(node -p "require('fs').readFileSync('common/scripts/version.txt','utf8').trim().replace(/\"/g,'')")
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="${VERSION}-${SHORT_SHA}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building images tagged :$VERSION"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building images tagged :$VERSION (movable) and :$TAG (immutable, what Railway will pin to)"
+
+      - name: Kanbee release audit
+        run: node scripts/kanbee-audit.mjs
 
       - name: Rush install
         run: node common/scripts/install-run-rush.js install
@@ -116,7 +132,11 @@ jobs:
           context: pods/server
           push: true
           provenance: false
-          tags: ghcr.io/pinapple-org/kanbee-transactor:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=kanbee-transactor
+          cache-to: type=gha,mode=max,scope=kanbee-transactor
+          tags: |
+            ghcr.io/pinapple-org/kanbee-transactor:${{ steps.version.outputs.version }}
+            ghcr.io/pinapple-org/kanbee-transactor:${{ steps.version.outputs.tag }}
 
       - name: Build and push workspace
         uses: docker/build-push-action@v5
@@ -124,7 +144,11 @@ jobs:
           context: pods/workspace
           push: true
           provenance: false
-          tags: ghcr.io/pinapple-org/kanbee-workspace:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=kanbee-workspace
+          cache-to: type=gha,mode=max,scope=kanbee-workspace
+          tags: |
+            ghcr.io/pinapple-org/kanbee-workspace:${{ steps.version.outputs.version }}
+            ghcr.io/pinapple-org/kanbee-workspace:${{ steps.version.outputs.tag }}
 
       - name: Build and push fulltext
         uses: docker/build-push-action@v5
@@ -132,7 +156,11 @@ jobs:
           context: pods/fulltext
           push: true
           provenance: false
-          tags: ghcr.io/pinapple-org/kanbee-fulltext:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=kanbee-fulltext
+          cache-to: type=gha,mode=max,scope=kanbee-fulltext
+          tags: |
+            ghcr.io/pinapple-org/kanbee-fulltext:${{ steps.version.outputs.version }}
+            ghcr.io/pinapple-org/kanbee-fulltext:${{ steps.version.outputs.tag }}
 
       - name: Build and push front (with Kanbee branding)
         uses: docker/build-push-action@v5
@@ -141,14 +169,95 @@ jobs:
           file: .github/docker/Dockerfile.kanbee-front
           push: true
           provenance: false
-          tags: ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=kanbee-front
+          cache-to: type=gha,mode=max,scope=kanbee-front
+          tags: |
+            ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.version }}
+            ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.tag }}
+
+      - name: Validate Railway deploy secrets
+        if: ${{ inputs.deploy_to_railway }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_TRANSACTOR_SERVICE_ID: ${{ secrets.RAILWAY_TRANSACTOR_SERVICE_ID }}
+          RAILWAY_WORKSPACE_SERVICE_ID: ${{ secrets.RAILWAY_WORKSPACE_SERVICE_ID }}
+          RAILWAY_FULLTEXT_SERVICE_ID: ${{ secrets.RAILWAY_FULLTEXT_SERVICE_ID }}
+          RAILWAY_FRONT_SERVICE_ID: ${{ secrets.RAILWAY_FRONT_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            RAILWAY_TOKEN \
+            RAILWAY_PROJECT_ID \
+            RAILWAY_ENVIRONMENT_ID \
+            RAILWAY_TRANSACTOR_SERVICE_ID \
+            RAILWAY_WORKSPACE_SERVICE_ID \
+            RAILWAY_FULLTEXT_SERVICE_ID \
+            RAILWAY_FRONT_SERVICE_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required secret $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install Railway CLI
+        if: ${{ inputs.deploy_to_railway }}
+        run: npm install -g @railway/cli
+
+      - name: Update Railway image targets
+        if: ${{ inputs.deploy_to_railway }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_TRANSACTOR_SERVICE_ID: ${{ secrets.RAILWAY_TRANSACTOR_SERVICE_ID }}
+          RAILWAY_WORKSPACE_SERVICE_ID: ${{ secrets.RAILWAY_WORKSPACE_SERVICE_ID }}
+          RAILWAY_FULLTEXT_SERVICE_ID: ${{ secrets.RAILWAY_FULLTEXT_SERVICE_ID }}
+          RAILWAY_FRONT_SERVICE_ID: ${{ secrets.RAILWAY_FRONT_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          railway link --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID"
+          railway env edit \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --message "Deploy Kanbee $TAG" \
+            --service-config "$RAILWAY_TRANSACTOR_SERVICE_ID" source.image "ghcr.io/pinapple-org/kanbee-transactor:$TAG" \
+            --service-config "$RAILWAY_WORKSPACE_SERVICE_ID" source.image "ghcr.io/pinapple-org/kanbee-workspace:$TAG" \
+            --service-config "$RAILWAY_FULLTEXT_SERVICE_ID" source.image "ghcr.io/pinapple-org/kanbee-fulltext:$TAG" \
+            --service-config "$RAILWAY_FRONT_SERVICE_ID" source.image "ghcr.io/pinapple-org/kanbee-front:$TAG"
+
+      - name: Audit Railway image targets
+        if: ${{ inputs.deploy_to_railway }}
+        env:
+          KANBEE_CHECK_RAILWAY: 'true'
+          KANBEE_DEPLOY_TAG: ${{ steps.version.outputs.tag }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_TRANSACTOR_SERVICE_ID: ${{ secrets.RAILWAY_TRANSACTOR_SERVICE_ID }}
+          RAILWAY_WORKSPACE_SERVICE_ID: ${{ secrets.RAILWAY_WORKSPACE_SERVICE_ID }}
+          RAILWAY_FULLTEXT_SERVICE_ID: ${{ secrets.RAILWAY_FULLTEXT_SERVICE_ID }}
+          RAILWAY_FRONT_SERVICE_ID: ${{ secrets.RAILWAY_FRONT_SERVICE_ID }}
+        run: node scripts/kanbee-audit.mjs
 
       - name: Summary
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
           echo "## Pushed images" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Each image was pushed under **two** tags:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`:$VERSION\` — movable pointer for huly-selfhost / dev compose / quick smoke tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`:$TAG\` — immutable per-commit tag, **use this one when pinning Railway**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           for name in transactor workspace fulltext front; do
-            echo "- \`ghcr.io/pinapple-org/kanbee-$name:${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`ghcr.io/pinapple-org/kanbee-$name:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Update Railway services to point at \`:${{ steps.version.outputs.version }}\`." >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.deploy_to_railway }}" = "true" ]; then
+            echo "Railway image targets were updated to \`:$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Railway deploy was not requested. To deploy: re-run with \`deploy_to_railway=true\`, or manually update Railway services to \`:$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+          fi

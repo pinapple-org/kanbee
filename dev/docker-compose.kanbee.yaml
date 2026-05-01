@@ -1,0 +1,98 @@
+# Kanbee dev overlay — mirrors what runs on Railway in production.
+#
+# Layers on top of docker-compose.yaml + docker-compose.pg.yaml:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f docker-compose.pg.yaml \
+#     -f docker-compose.kanbee.yaml \
+#     --profile postgres up
+#
+# What this overlay does (matches Phase 1 + 2 from CLAUDE.md):
+#   - Disables cockroach, redpanda, elastic, minio (replaced by PG / pgqueue / Meili / R2)
+#   - Adds meilisearch (FULLTEXT_DB_URL target)
+#   - Swaps the 4 custom pods to ghcr.io/pinapple-org/kanbee-* images
+#   - Routes QUEUE_CONFIG to PG (pgqueue adapter) and STORAGE_CONFIG to R2
+#   - Mounts Kanbee branding into the front container
+#
+# Requires .env in this directory (or shell env) with:
+#   DB_URL_PG=postgres://postgres:postgres@postgres:5432/postgres
+#   R2_ACCESS_KEY=...   R2_SECRET_KEY=...
+#   MEILI_MASTER_KEY=kanbee-meili-secret   (any value, must match across services)
+#   KANBEE_TAG=0.7.413   (or whatever the current version.txt is)
+
+services:
+  # --- disable services we replaced ---
+  cockroach:
+    profiles: ["kanbee-disabled"]
+  redpanda:
+    profiles: ["kanbee-disabled"]
+  redpanda_console:
+    profiles: ["kanbee-disabled"]
+  elastic:
+    profiles: ["kanbee-disabled"]
+  minio:
+    profiles: ["kanbee-disabled"]
+
+  # --- add Meilisearch (replaces Elasticsearch) ---
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    extra_hosts:
+      - "huly.local:host-gateway"
+    environment:
+      - MEILI_ENV=production
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-kanbee-meili-secret}
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    ports:
+      - 7700:7700
+
+  # --- swap to Kanbee custom images + Phase 2 env ---
+  transactor_cockroach:
+    image: ghcr.io/pinapple-org/kanbee-transactor:${KANBEE_TAG:-0.7.413}
+    environment:
+      - QUEUE_CONFIG=${DB_URL_PG}?schema=huly_queue
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+
+  workspace_cockroach:
+    image: ghcr.io/pinapple-org/kanbee-workspace:${KANBEE_TAG:-0.7.413}
+    environment:
+      - QUEUE_CONFIG=${DB_URL_PG}?schema=huly_queue
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+
+  fulltext_cockroach:
+    image: ghcr.io/pinapple-org/kanbee-fulltext:${KANBEE_TAG:-0.7.413}
+    environment:
+      - QUEUE_CONFIG=${DB_URL_PG}?schema=huly_queue
+      - FULLTEXT_DB_URL=meilisearch://${MEILI_MASTER_KEY:-kanbee-meili-secret}@meilisearch:7700
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+
+  account:
+    environment:
+      - QUEUE_CONFIG=${DB_URL_PG}?schema=huly_queue
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+      - PRODUCT_NAME=Kanbee
+      - DISABLE_SIGNUP=true
+
+  collaborator:
+    environment:
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+
+  front:
+    image: ghcr.io/pinapple-org/kanbee-front:${KANBEE_TAG:-0.7.413}
+    environment:
+      - TITLE=Kanbee
+      - STORAGE_CONFIG=s3|https://8e80e200b2da49226116e6c93a602506.r2.cloudflarestorage.com?accessKey=${R2_ACCESS_KEY}&secretKey=${R2_SECRET_KEY}&region=auto&rootBucket=kanbee
+      - DISABLE_SIGNUP=true
+    volumes:
+      - ../branding/kanbee/branding.json:/app/dist/branding.json:ro
+      - ../branding/kanbee/kanbee:/app/dist/kanbee:ro
+
+volumes:
+  meili_data:
