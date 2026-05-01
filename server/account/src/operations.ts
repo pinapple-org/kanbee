@@ -1735,7 +1735,7 @@ export async function generate2faSecret (
   }
 
   const secret = generateTotpSecret()
-  const app = branding?.title ?? getMetadata(accountPlugin.metadata.ProductName) ?? 'Huly'
+  const app = branding?.title ?? getMetadata(accountPlugin.metadata.ProductName) ?? 'Kanbee'
   const url = getTotpUrl(emailSocialId.value, app, secret)
 
   return { secret, url }
@@ -2728,7 +2728,7 @@ export async function releaseSocialId (
   }
 
   if (!allowedService) {
-    // User should always have at least one Huly and one "login" social id
+    // User should always have at least one primary and one "login" social id
     // so do not allow releasing last ones
     const socialIds = await db.socialId.find({ personUuid, verifiedOn: { $gt: 0 }, isDeleted: { $ne: true } })
     const afterRemoval = socialIds.filter((it) => it.type !== type || it.value !== value)

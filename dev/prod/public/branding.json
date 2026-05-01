@@ -1,6 +1,6 @@
 {
   "huly.local:8080": {
-    "title": "Huly",
+    "title": "Kanbee",
     "languages": "en,ru,pt,pt-br,es,zh,fr,de,ja,tr",
     "defaultLanguage": "en",
     "defaultApplication": "tracker",
@@ -10,26 +10,27 @@
     "links": [
       {
         "rel": "manifest",
-        "href": "/huly/site.webmanifest"
+        "href": "/kanbee/site.webmanifest"
       },
       {
         "rel": "icon",
-        "href": "/huly/favicon.svg",
+        "href": "/kanbee/favicon.svg",
         "type": "image/svg+xml"
       },
       {
-        "rel": "shortcut icon",
-        "href": "/huly/favicon.ico",
-        "sizes": "any"
-      },
-      {
         "rel": "apple-touch-icon",
-        "href": "/huly/apple-touch-icon.png"
+        "href": "/kanbee/apple-touch-icon.png"
       }
-    ]
+    ],
+    "support": {
+      "supportLink": "",
+      "reportBugLink": "",
+      "docsLink": "",
+      "privacyPolicyLink": ""
+    }
   },
   "huly.local:8087": {
-    "title": "Huly",
+    "title": "Kanbee",
     "languages": "en,ru,pt,pt-br,es,zh,fr,de,ja,tr",
     "defaultLanguage": "en",
     "defaultApplication": "tracker",
@@ -39,23 +40,24 @@
     "links": [
       {
         "rel": "manifest",
-        "href": "/huly/site.webmanifest"
+        "href": "/kanbee/site.webmanifest"
       },
       {
         "rel": "icon",
-        "href": "/huly/favicon.svg",
+        "href": "/kanbee/favicon.svg",
         "type": "image/svg+xml"
       },
       {
-        "rel": "shortcut icon",
-        "href": "/huly/favicon.ico",
-        "sizes": "any"
-      },
-      {
         "rel": "apple-touch-icon",
-        "href": "/huly/apple-touch-icon.png"
+        "href": "/kanbee/apple-touch-icon.png"
       }
-    ]
+    ],
+    "support": {
+      "supportLink": "",
+      "reportBugLink": "",
+      "docsLink": "",
+      "privacyPolicyLink": ""
+    }
   },
   "huly.local:8081": {
     "title": "TraceX",

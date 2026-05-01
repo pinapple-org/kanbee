@@ -41,7 +41,7 @@
     reduceCalls
   } from '@hcengineering/presentation'
   import setting from '@hcengineering/setting'
-  import support, { supportLink, SupportStatus } from '@hcengineering/support'
+  import support, { SupportStatus } from '@hcengineering/support'
   import {
     AnyComponent,
     areLocationsEqual,
@@ -740,6 +740,9 @@
   }
 
   let supportStatus: SupportStatus | undefined = undefined
+  const hasLink = (value: string | undefined): value is string => value !== undefined && value.trim().length > 0
+  $: externalSupportLink = getMetadata(support.metadata.SupportLink)
+
   function handleSupportStatusChanged (status: SupportStatus) {
     supportStatus = status
   }
@@ -930,16 +933,18 @@
           size={appsMini ? 'small' : 'large'}
           on:click={() => showPopup(AppSwitcher, { apps }, popupPosition)}
         />
-        <a href={supportLink} target="_blank" rel="noopener noreferrer">
-          <AppItem
-            icon={support.icon.Support}
-            label={support.string.ContactUs}
-            size={appsMini ? 'small' : 'large'}
-            notify={supportStatus?.hasUnreadMessages}
-            selected={supportStatus?.visible}
-            loading={supportWidgetLoading}
-          />
-        </a>
+        {#if hasLink(externalSupportLink)}
+          <a href={externalSupportLink} target="_blank" rel="noopener noreferrer">
+            <AppItem
+              icon={support.icon.Support}
+              label={support.string.ContactUs}
+              size={appsMini ? 'small' : 'large'}
+              notify={supportStatus?.hasUnreadMessages}
+              selected={supportStatus?.visible}
+              loading={supportWidgetLoading}
+            />
+          </a>
+        {/if}
         <!-- {#await supportClient then client}
           {#if client}
             <AppItem

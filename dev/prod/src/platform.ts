@@ -239,6 +239,7 @@ const configs: Record<string, string> = {
   'dev-huly': '/config-huly.json',
   'dev-bold': '/config.json',
   'dev-server': '/config.json',
+  'dev-kanbee': '/config-kanbee.json',
   'dev-server-test': '/config-test.json',
   'dev-worker': '/config-worker.json',
   'dev-worker-local': '/config-worker-local.json'

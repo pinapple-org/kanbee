@@ -91,6 +91,14 @@ class MeiliAdapter implements FullTextAdapter {
     this.getDocId = (w, f) => f.slice(0, -1 * (w.length + 1)) as Ref<Doc>
   }
 
+  private toIndexedDoc (workspaceId: WorkspaceUuid, hit: Record<string, unknown>): IndexedDoc {
+    const fulltextId = typeof hit.id === 'string' ? hit.id : ''
+    const storedDocId = typeof hit.docId === 'string' ? hit.docId : undefined
+    const id = storedDocId ?? (fulltextId.length > 0 ? this.getDocId(workspaceId, fulltextId as Ref<Doc>) : hit.id)
+    const { docId: _docId, ...rest } = hit
+    return { ...(rest as unknown as IndexedDoc), id: id as Ref<Doc> }
+  }
+
   private async getIndex (): Promise<Index<Record<string, unknown>>> {
     if (this.indexHandle !== undefined) return this.indexHandle
     try {
@@ -140,14 +148,19 @@ class MeiliAdapter implements FullTextAdapter {
         filter.push(`space IN [${query.spaces.map(escapeFilterValue).join(', ')}]`)
       }
       const limit = options.limit ?? DEFAULT_LIMIT
-      const result = await index.search<Record<string, unknown>>(query.query, {
+      // Callers (e.g. presentation/src/search.ts) append `*` for ES prefix
+      // matching. Meilisearch treats `*` as a literal character, so `john*`
+      // matches nothing — strip the trailing wildcard. Meili already does
+      // prefix-matching on the last token by default.
+      const q = query.query.replace(/\*+$/, '')
+      const result = await index.search<Record<string, unknown>>(q, {
         filter,
         limit,
         offset: 0,
         showRankingScore: true
       })
       const docs = result.hits.map((hit) => ({
-        ...(hit as IndexedDoc),
+        ...this.toIndexedDoc(workspaceId, hit),
         _score: (hit as { _rankingScore?: number })._rankingScore
       }))
       return { docs, total: result.estimatedTotalHits }
@@ -179,7 +192,7 @@ class MeiliAdapter implements FullTextAdapter {
         limit,
         offset
       })
-      return result.hits.map((hit) => hit as IndexedDoc)
+      return result.hits.map((hit) => this.toIndexedDoc(workspaceId, hit))
     } catch (err: any) {
       ctx.error('Meilisearch search error', { err })
       Analytics.handleError(err)
@@ -227,6 +240,18 @@ class MeiliAdapter implements FullTextAdapter {
       }
     }
     return []
+  }
+
+  async load (ctx: MeasureContext, workspaceId: WorkspaceUuid, docs: Ref<Doc>[]): Promise<IndexedDoc[]> {
+    if (docs.length === 0) return []
+    const index = await this.getIndex()
+    const ids = docs.map((id) => this.getFulltextDocId(workspaceId, id))
+    const result = await index.search<Record<string, unknown>>('', {
+      filter: [`id IN [${ids.map(escapeFilterValue).join(', ')}]`, `workspaceId = ${escapeFilterValue(workspaceId)}`],
+      limit: docs.length,
+      offset: 0
+    })
+    return result.hits.map((hit) => this.toIndexedDoc(workspaceId, hit))
   }
 
   async updateByQuery (

@@ -89,16 +89,29 @@
     disabled?: boolean
   }
 
-  const cards: HelpCard[] = [
-    {
-      icon: DocumentationIcon,
-      title: workbench.string.Documentation,
-      description: workbench.string.OpenPlatformGuide,
-      onClick: () => {
-        window.open(getMetadata(support.metadata.DocsLink), '_blank')
-        Analytics.handleEvent(WorkbenchEvents.DocumentationOpened)
-      }
-    },
+  const hasLink = (value: string | undefined): value is string => value !== undefined && value.trim().length > 0
+
+  $: docsUrl = getMetadata(support.metadata.DocsLink)
+  $: privacyPolicyUrl = getMetadata(support.metadata.PrivacyPolicyLink)
+  $: reportBugUrl = getMetadata(support.metadata.ReportBugLink)
+  $: contactUsUrl = getMetadata(support.metadata.SupportLink)
+
+  let cards: HelpCard[] = []
+  $: cards = [
+    ...(hasLink(docsUrl)
+      ? [
+          {
+            icon: DocumentationIcon,
+            title: workbench.string.Documentation,
+            description: workbench.string.OpenPlatformGuide,
+            onClick: () => {
+              if (!hasLink(docsUrl)) return
+              window.open(docsUrl, '_blank')
+              Analytics.handleEvent(WorkbenchEvents.DocumentationOpened)
+            }
+          }
+        ]
+      : []),
     {
       icon: view.icon.Setting,
       title: setting.string.Settings,
@@ -202,23 +215,31 @@
       </ListView>
     </Scroller>
   {/if}
-  <div class="footer">
-    <a href={getMetadata(support.metadata.PrivacyPolicyLink)} target="_blank">
-      <Button id="privacy-policy" kind={'ghost'} label={support.string.PrivacyPolicy} stopPropagation={false} />
-    </a>
-    <a href={getMetadata(support.metadata.ReportBugLink)} target="_blank">
-      <Button id="report-a-bug" kind={'primary'} label={support.string.ReportBug} stopPropagation={false} />
-    </a>
-    <a href={getMetadata(support.metadata.SupportLink)} target="_blank">
-      <Button
-        id="contact-us"
-        icon={support.icon.Support}
-        kind={'ghost'}
-        label={support.string.ContactUs}
-        stopPropagation={false}
-      />
-    </a>
-  </div>
+  {#if hasLink(privacyPolicyUrl) || hasLink(reportBugUrl) || hasLink(contactUsUrl)}
+    <div class="footer">
+      {#if hasLink(privacyPolicyUrl)}
+        <a href={privacyPolicyUrl} target="_blank" rel="noopener noreferrer">
+          <Button id="privacy-policy" kind={'ghost'} label={support.string.PrivacyPolicy} stopPropagation={false} />
+        </a>
+      {/if}
+      {#if hasLink(reportBugUrl)}
+        <a href={reportBugUrl} target="_blank" rel="noopener noreferrer">
+          <Button id="report-a-bug" kind={'primary'} label={support.string.ReportBug} stopPropagation={false} />
+        </a>
+      {/if}
+      {#if hasLink(contactUsUrl)}
+        <a href={contactUsUrl} target="_blank" rel="noopener noreferrer">
+          <Button
+            id="contact-us"
+            icon={support.icon.Support}
+            kind={'ghost'}
+            label={support.string.ContactUs}
+            stopPropagation={false}
+          />
+        </a>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style lang="scss">

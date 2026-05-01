@@ -13,7 +13,20 @@
 // limitations under the License.
 //
 
+const fs = require('fs')
+const path = require('path')
 const exec = require('child_process').exec
+
+try {
+  const versionFilePath = path.resolve(__dirname, 'version.txt')
+  const version = fs.readFileSync(versionFilePath, 'utf8').trim()
+  if (version.length > 0) {
+    console.log(version)
+    process.exit(0)
+  }
+} catch (err) {
+  // Fall back to the upstream tag-derived version below.
+}
 
 exec('git describe --tags --abbrev=0', (err, stdout, stderr) => {
   if (err !== null) {

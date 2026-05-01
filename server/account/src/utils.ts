@@ -611,8 +611,8 @@ export async function isOtpValid (db: AccountDB, socialId: PersonId, code: strin
 }
 
 /**
- * Creates an account and a Huly social id for the specified person.
- * Returns the _id of the newly created Huly social id.
+ * Creates an account and primary social id for the specified person.
+ * Returns the _id of the newly created primary social id.
  */
 export async function createAccount (
   db: AccountDB,
@@ -621,7 +621,7 @@ export async function createAccount (
   automatic = false,
   createdOn = Date.now()
 ): Promise<PersonId> {
-  // Create Huly social id and account
+  // Create primary social id and account
   const socialId = await db.socialId.insertOne({
     type: SocialIdType.HULY,
     value: personUuid,
@@ -721,7 +721,7 @@ export async function signUpByGrant (
     await db.person.insertOne({ uuid: accountUuid, firstName, lastName: lastName ?? '' })
   }
 
-  // If there's no account there should be no Huly social id associated with the person if it existed
+  // If there's no account there should be no primary social id associated with the person if it existed
   // also, there should be no confirmed social ids associated
   // so we can safely proceed to account creation
 

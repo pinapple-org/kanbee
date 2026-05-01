@@ -33,6 +33,7 @@ const devServerWorkerLocal = clientType === 'dev-worker-local'
 const devProduction = clientType === 'dev-production'
 const devProductionHuly = clientType === 'dev-huly'
 const devProductionBold = clientType === 'dev-bold'
+const devKanbee = clientType === 'dev-kanbee'
 const dev =
   (process.env.CLIENT_TYPE ?? '') === 'dev' ||
   devServer ||
@@ -41,10 +42,13 @@ const dev =
   devProductionBold ||
   devServerWorker ||
   devServerWorkerLocal ||
-  devServerTest
+  devServerTest ||
+  devKanbee
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin')
 
-const doValidate = !prod || process.env.DO_VALIDATE === 'true'
+const doValidate =
+  process.env.DO_VALIDATE === 'true' ||
+  (process.env.DO_VALIDATE !== 'false' && !prod)
 
 const useCache = process.env.USE_CACHE === 'true'
 
