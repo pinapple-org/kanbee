@@ -35,6 +35,11 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-18
+          # PGDG installs to /usr/lib/postgresql/18/bin/ but doesn't update
+          # the default pg_dump symlink (system stays at v16). Prepend so
+          # the next step picks up v18.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
 
       - name: Run backup
         run: bash scripts/pg-backup.sh
