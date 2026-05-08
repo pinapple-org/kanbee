@@ -8,5 +8,13 @@ COPY dev/prod/dist/ ./dist/
 COPY branding/kanbee/branding.json ./dist/branding.json
 COPY branding/kanbee/kanbee/ ./dist/kanbee/
 
+# Browsers and iOS auto-request these at the document root regardless of the
+# <link> tags in branding.json, so serve copies there too. PNG works as a
+# favicon.ico fallback in every current browser; the .ico extension is just a
+# legacy convention from IE.
+COPY branding/kanbee/kanbee/apple-touch-icon.png ./dist/favicon.ico
+COPY branding/kanbee/kanbee/apple-touch-icon.png ./dist/apple-touch-icon.png
+COPY branding/kanbee/kanbee/apple-touch-icon.png ./dist/apple-touch-icon-precomposed.png
+
 EXPOSE 8080
 CMD [ "node", "./bundle.js" ]
