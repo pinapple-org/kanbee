@@ -1,0 +1,72 @@
+name: Check upstream Huly version
+
+# Polls hcengineering/platform's main branch for a version.txt bump and opens
+# (or updates) a tracking issue when our pinned version is behind. Designed to
+# replace manual "did upstream cut a new release?" checks.
+
+on:
+  schedule:
+    - cron: '0 13 * * 1'  # Mondays at 13:00 UTC (10:00 BRT)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare local vs upstream version.txt
+        id: compare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LOCAL=$(node -p "require('fs').readFileSync('common/scripts/version.txt','utf8').trim().replace(/\"/g,'')")
+          UPSTREAM=$(curl -fsSL https://raw.githubusercontent.com/hcengineering/platform/main/common/scripts/version.txt | tr -d '"' | tr -d '[:space:]')
+          echo "local=$LOCAL"     >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "behind=false" >> "$GITHUB_OUTPUT"
+            echo "Up to date: $LOCAL"
+          else
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Pinned $LOCAL, upstream is $UPSTREAM"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.compare.outputs.behind == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOCAL: ${{ steps.compare.outputs.local }}
+          UPSTREAM: ${{ steps.compare.outputs.upstream }}
+        run: |
+          set -euo pipefail
+          TITLE="Upstream Huly bumped to v${UPSTREAM} (we are on v${LOCAL})"
+          BODY=$(cat <<EOF
+          The upstream \`hcengineering/platform/main\` is now on **v${UPSTREAM}**, our fork pins **v${LOCAL}**.
+
+          To upgrade:
+
+          1. \`cd platform && git fetch upstream && git merge upstream/main\` — handle any conflicts.
+          2. Confirm \`common/scripts/version.txt\` reads \`"${UPSTREAM}"\`.
+          3. Run the [Build Kanbee custom images](../actions/workflows/kanbee-images.yml) workflow with \`deploy_to_railway=true\` (or \`false\` if you want to smoke-test locally first).
+          4. Smoke-test \`https://app.kanbee.io\`, watch for the front/transactor version-mismatch banner.
+
+          See [CLAUDE.md](../CLAUDE.md) section "Rebuild workflow" for the full procedure.
+
+          Auto-checked weekly. Close this issue once upgraded — the next bump opens a new one.
+          EOF
+          )
+          # Reuse an open issue if one exists for the same upstream version
+          # (avoids spamming on weekly re-runs while we're still on $LOCAL).
+          EXISTING=$(gh issue list --state open --search "in:title \"Upstream Huly bumped to v${UPSTREAM}\"" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already tracks this bump — skipping."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "$BODY" --label "upstream-bump"
