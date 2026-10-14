@@ -1272,7 +1272,7 @@ export class PostgresAccountDB implements AccountDB {
       accountUuid: accountId,
       permission
     })
-    return result !== undefined
+    return result != null
   }
 
   async getWorkspacePermissions (accountId: AccountUuid, permission: string): Promise<WorkspaceUuid[]> {
