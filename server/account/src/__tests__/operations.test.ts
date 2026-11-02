@@ -54,7 +54,8 @@ import {
   leaveWorkspace,
   checkJoin,
   mergeSpecifiedPersons,
-  canMergeSpecifiedPersons
+  canMergeSpecifiedPersons,
+  getMailboxSecret
 } from '../operations'
 import { accountPlugin } from '../plugin'
 
@@ -1023,6 +1024,44 @@ describe('account operations', () => {
       await expect(getLoginInfoByToken(mockCtx, mockDb, mockBranding, mockToken)).rejects.toThrow(
         new PlatformError(new Status(Severity.ERROR, platform.status.TokenExpired, {}))
       )
+    })
+  })
+
+  describe('getMailboxSecret', () => {
+    const mailbox = 'user@example.com'
+    const mailboxSecret = { mailbox, secret: 'smtp-secret' }
+    let mailboxDb: AccountDB
+
+    beforeEach(() => {
+      mailboxDb = {
+        mailboxSecret: {
+          findOne: jest.fn().mockResolvedValue(mailboxSecret)
+        }
+      } as unknown as AccountDB
+    })
+
+    test('returns the secret to the mail service', async () => {
+      ;(decodeTokenVerbose as jest.Mock).mockReturnValue({
+        account: systemAccountUuid,
+        extra: { service: 'huly-mail' }
+      })
+
+      const result = await getMailboxSecret(mockCtx, mailboxDb, mockBranding, mockToken, { mailbox })
+
+      expect(result).toEqual(mailboxSecret)
+      expect(mailboxDb.mailboxSecret.findOne).toHaveBeenCalledWith({ mailbox })
+    })
+
+    test.each([
+      ['a regular user', {}],
+      ['another service', { service: 'github' }]
+    ])('rejects %s without reading the secret', async (_, extra) => {
+      ;(decodeTokenVerbose as jest.Mock).mockReturnValue({ account: mockAccount.uuid, extra })
+
+      await expect(getMailboxSecret(mockCtx, mailboxDb, mockBranding, mockToken, { mailbox })).rejects.toThrow(
+        new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+      )
+      expect(mailboxDb.mailboxSecret.findOne).not.toHaveBeenCalled()
     })
   })
 
