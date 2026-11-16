@@ -13,6 +13,7 @@ Production must not track upstream `main` directly.
   - `ghcr.io/pinapple-org/kanbee-transactor:0.7.413`
   - `ghcr.io/pinapple-org/kanbee-workspace:0.7.413`
   - `ghcr.io/pinapple-org/kanbee-fulltext:0.7.413`
+  - `ghcr.io/pinapple-org/kanbee-account:0.7.413` (Huly account service plus the security backports below; rolled out by hand, see "Account Service")
 
 Keep `common/scripts/show_version.js`, `common/scripts/show_tag.js`, the Docker image workflow, and deployment targets aligned with `version.txt`. Run:
 
@@ -64,8 +65,10 @@ node common/scripts/install-run-rush.js install
 node scripts/kanbee-audit.mjs
 node common/scripts/install-run-rush.js build --to @hcengineering/pgqueue --to @hcengineering/meili
 node common/scripts/install-run-rush.js test --to @hcengineering/pgqueue --to @hcengineering/meili
-node common/scripts/install-run-rush.js bundle --to @hcengineering/pod-server --to @hcengineering/pod-workspace --to @hcengineering/pod-fulltext --to @hcengineering/pod-front
+node common/scripts/install-run-rush.js bundle --to @hcengineering/pod-server --to @hcengineering/pod-workspace --to @hcengineering/pod-fulltext --to @hcengineering/pod-front --to @hcengineering/pod-account
 ```
+
+5. Re-check the account security backports listed under "Account Service": drop each one the new upstream base already contains, and keep the rest.
 
 For real adapter smoke tests, provide:
 
@@ -93,6 +96,29 @@ Required only when `deploy_to_railway` is selected:
 The workflow builds and pushes all four custom images from the same `version.txt` value. If deployment is enabled, it updates all four Railway service `source.image` values to that same tag in one workflow run.
 
 Do not deploy only one of the four custom images. Front, transactor, workspace, and fulltext must move together so the model version in the browser, transactor, workspace worker, and fulltext worker remains aligned.
+
+The workflow also builds and pushes `kanbee-account` from the same commit, but `deploy_to_railway` does not touch the account service. See "Account Service".
+
+## Account Service
+
+Upstream Huly only patches its latest release, so the pinned `0.7.413` base keeps account vulnerabilities that upstream fixed later. `kanbee-account` carries these upstream fixes as cherry-picks (`git cherry-pick -x`, so each commit names its source):
+
+| Upstream PR | Fix | Upstream release that contains it |
+|---|---|---|
+| hcengineering/platform#10869 | `checkJoin` throws Forbidden for non-members | `s0.7.437` |
+| hcengineering/platform#10861 | `signUpJoin` requires email confirmation when `MAIL_URL` is set | `s0.7.437` |
+| hcengineering/platform#10997 | `mergeSpecifiedPersons` / `canMergeSpecifiedPersons` check authority (account takeover, hcengineering/platform#10914) | `s0.7.437` |
+| hcengineering/platform#11067 | `hasWorkspacePermission` no longer returns true for missing grants | `develop` only |
+| hcengineering/platform#11095 | `getMailboxSecret` enforces the `huly-mail` service check (hcengineering/platform#10862) | `develop` only |
+
+Apart from these backports, `server/account`, `server/account-service` and `pods/account` match upstream `s0.7.413` and `s0.7.418` (upstream made no account changes between those tags), except for Kanbee branding in the email templates and the 2FA app name. The account service does not use the platform queue, so the `pgqueue` routing does not affect it.
+
+The account service owns the accounts database (users, workspaces, invites, social ids), so it is switched by hand, never by `deploy_to_railway`:
+
+1. Back up the accounts database (`DB_URL` of the account service) and confirm the backup restores.
+2. In staging, set the account service `source.image` to `ghcr.io/pinapple-org/kanbee-account:<version>-<sha>` (the immutable tag from the workflow summary).
+3. Smoke test staging: login, workspace selection, invite join, password recovery email.
+4. Repeat in production. To roll back, set the image back to the previous one: the backports add no database migrations.
 
 ## Branding Source
 

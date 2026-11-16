@@ -74,7 +74,7 @@ jobs:
       - name: Rush install
         run: node common/scripts/install-run-rush.js install
 
-      - name: Bundle pods (transactor, workspace, fulltext, front)
+      - name: Bundle pods (transactor, workspace, fulltext, front, account)
         env:
           NODE_OPTIONS: '--max-old-space-size=12288'
         run: |
@@ -82,7 +82,8 @@ jobs:
             --to @hcengineering/pod-server \
             --to @hcengineering/pod-workspace \
             --to @hcengineering/pod-fulltext \
-            --to @hcengineering/pod-front
+            --to @hcengineering/pod-front \
+            --to @hcengineering/pod-account
 
       - name: Build front SPA (webpack)
         env:
@@ -175,6 +176,22 @@ jobs:
             ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.version }}
             ghcr.io/pinapple-org/kanbee-front:${{ steps.version.outputs.tag }}
 
+      # Account carries Kanbee security backports on top of the pinned Huly base
+      # (see docs/kanbee-safe-foundation.md). It is built here but NOT switched by
+      # deploy_to_railway: the account service owns the accounts DB, so it is rolled
+      # out by hand (staging first, after a DB backup).
+      - name: Build and push account
+        uses: docker/build-push-action@v5
+        with:
+          context: pods/account
+          push: true
+          provenance: false
+          cache-from: type=gha,scope=kanbee-account
+          cache-to: type=gha,mode=max,scope=kanbee-account
+          tags: |
+            ghcr.io/pinapple-org/kanbee-account:${{ steps.version.outputs.version }}
+            ghcr.io/pinapple-org/kanbee-account:${{ steps.version.outputs.tag }}
+
       - name: Validate Railway deploy secrets
         if: ${{ inputs.deploy_to_railway }}
         env:
@@ -252,12 +269,14 @@ jobs:
           echo "- \`:$VERSION\` — movable pointer for huly-selfhost / dev compose / quick smoke tests" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`:$TAG\` — immutable per-commit tag, **use this one when pinning Railway**" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          for name in transactor workspace fulltext front; do
+          for name in transactor workspace fulltext front account; do
             echo "- \`ghcr.io/pinapple-org/kanbee-$name:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ inputs.deploy_to_railway }}" = "true" ]; then
-            echo "Railway image targets were updated to \`:$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "Railway image targets of transactor, workspace, fulltext and front were updated to \`:$TAG\`." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Railway deploy was not requested. To deploy: re-run with \`deploy_to_railway=true\`, or manually update Railway services to \`:$TAG\`." >> "$GITHUB_STEP_SUMMARY"
           fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`kanbee-account\` is never switched by this workflow: roll it out by hand (staging first, after an accounts DB backup), see docs/kanbee-safe-foundation.md." >> "$GITHUB_STEP_SUMMARY"

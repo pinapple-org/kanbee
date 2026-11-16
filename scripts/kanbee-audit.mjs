@@ -14,6 +14,10 @@ const services = {
   front: 'RAILWAY_FRONT_SERVICE_ID'
 }
 
+// Images built by .github/workflows/kanbee-images.yml. `account` is built there too, but it is
+// rolled out by hand instead of by deploy_to_railway, so it is not part of `services` above.
+const builtImages = [...Object.keys(services), 'account']
+
 function read (relativePath) {
   return readFileSync(resolve(root, relativePath), 'utf8')
 }
@@ -90,7 +94,7 @@ for (const asset of [
 const workflow = read('.github/workflows/kanbee-images.yml')
 check(!workflow.includes('kanbee-deploy'), 'Kanbee image workflow still checks out kanbee-deploy')
 check(workflow.includes('deploy_to_railway'), 'Kanbee image workflow is missing the manual Railway deploy input')
-for (const service of Object.keys(services)) {
+for (const service of builtImages) {
   check(
     workflow.includes(`ghcr.io/pinapple-org/kanbee-${service}:`) &&
       workflow.includes('steps.version.outputs.version'),
