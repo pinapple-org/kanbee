@@ -36,7 +36,13 @@ import {
   type IntegrationKind
 } from '@hcengineering/core'
 import platform, { getMetadata, PlatformError, Severity, Status, translate } from '@hcengineering/platform'
-import { decodeToken, decodeTokenVerbose, generateToken, type PermissionsGrant } from '@hcengineering/server-token'
+import {
+  decodeToken,
+  decodeTokenVerbose,
+  generateToken,
+  type PermissionsGrant,
+  type Token
+} from '@hcengineering/server-token'
 
 import { isAdminEmail } from './admin'
 import { accountPlugin } from './plugin'
@@ -1086,6 +1092,11 @@ export async function checkJoin (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.WorkspaceNotFound, { workspaceUuid }))
   }
 
+  const role = await db.getWorkspaceRole(accountUuid, workspace.uuid)
+  if (role == null) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+  }
+
   const wsLoginInfo = await selectWorkspace(ctx, db, branding, token, { workspaceUrl: workspace.url, kind: 'external' })
 
   if (getRolePower(wsLoginInfo.role) < getRolePower(invite.role)) {
@@ -1268,7 +1279,7 @@ export async function signUpJoin (
     workspaceUrl: string
   },
   meta?: Meta
-): Promise<WorkspaceLoginInfo> {
+): Promise<WorkspaceLoginInfo | LoginInfo> {
   const { email, password, first, last, inviteId, workspaceUrl } = params
 
   if (password == null || password === '' || first == null || first === '') {
@@ -1284,8 +1295,47 @@ export async function signUpJoin (
     inviteId
   })
 
-  const { account } = await signUpByEmail(ctx, db, branding, email, password, first, last ?? '', true)
+  // Require email confirmation just like the regular signUp flow.
+  // Auto-confirm only when no mail service is configured (dev setups).
+  const mailURL = getMetadata(accountPlugin.metadata.MAIL_URL)
+  const forceConfirmation = mailURL !== undefined && mailURL !== ''
+
+  const { account, socialId } = await signUpByEmail(
+    ctx,
+    db,
+    branding,
+    email,
+    password,
+    first,
+    last ?? '',
+    !forceConfirmation
+  )
   void setTimezone(ctx, db, account, null, meta)
+
+  if (forceConfirmation) {
+    const person = await db.person.findOne({ uuid: account })
+    if (person == null) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.InternalServerError, {}))
+    }
+
+    const normalizedEmail = cleanEmail(email)
+    // Thread the invite info through the confirmation token so the user
+    // is auto-joined to the workspace once they confirm their email.
+    await sendEmailConfirmation(ctx, branding, account, normalizedEmail, {
+      inviteId,
+      workspaceUrl
+    })
+
+    return {
+      account,
+      name: getPersonName(person),
+      socialId,
+      token: undefined
+    }
+  }
+
+  ctx.warn('Please provide MAIL_URL to enable sign up email confirmations.')
+  await confirmHulyIds(ctx, db, account)
 
   return await doJoinByInvite(
     ctx,
@@ -1303,7 +1353,7 @@ export async function confirm (
   db: AccountDB,
   branding: Branding | null,
   token: string
-): Promise<LoginInfo> {
+): Promise<LoginInfo | WorkspaceLoginInfo> {
   const { account, extra } = decodeTokenVerbose(ctx, token)
 
   const email = extra?.confirmEmail
@@ -1321,11 +1371,42 @@ export async function confirm (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.PersonNotFound, { person: account }))
   }
 
-  const result = {
+  const result: LoginInfo = {
     account,
     name: getPersonName(person),
     socialId,
     token: generateToken(account)
+  }
+
+  // If invite info was carried through the confirmation token (signUpJoin flow),
+  // finish the workspace join now that the email is verified.
+  const inviteId = typeof extra?.inviteId === 'string' ? extra.inviteId : ''
+  const workspaceUrl = typeof extra?.workspaceUrl === 'string' ? extra.workspaceUrl : ''
+  if (inviteId !== '' || workspaceUrl !== '') {
+    try {
+      const joinInfo = await getWorkspaceJoinInfo(ctx, db, email, inviteId, workspaceUrl)
+      const joinResult = await doJoinByInvite(
+        ctx,
+        db,
+        branding,
+        generateToken(account, joinInfo.workspace?.uuid),
+        account,
+        joinInfo.workspace,
+        joinInfo.invite
+      )
+      ctx.info('Email confirmed and workspace joined via invite', { account, email, inviteId })
+      return joinResult
+    } catch (err: any) {
+      // The email is now verified, but the invite is stale/expired/invalid.
+      // Fall back to returning the basic login info so the user is at least signed in.
+      ctx.error('Email confirmed but failed to auto-join workspace via invite', {
+        account,
+        email,
+        inviteId,
+        workspaceUrl,
+        err
+      })
+    }
   }
 
   ctx.info('Email confirmed', { account, email })
@@ -2523,7 +2604,7 @@ async function getMailboxes (
   return await db.mailbox.find({ accountUuid: account })
 }
 
-async function getMailboxSecret (
+export async function getMailboxSecret (
   ctx: MeasureContext,
   db: AccountDB,
   branding: Branding | null,
@@ -2533,7 +2614,7 @@ async function getMailboxSecret (
   }
 ): Promise<MailboxSecret | null> {
   const { extra } = decodeTokenVerbose(ctx, token)
-  verifyAllowedServices(['huly-mail'], extra, false)
+  verifyAllowedServices(['huly-mail'], extra)
   return await db.mailboxSecret.findOne({ mailbox: params.mailbox })
 }
 
@@ -2774,6 +2855,79 @@ export async function deleteAccount (
   })
 }
 
+// Social ids that resolve to an account on their own, and therefore hand over the ability to
+// authenticate as its owner once they are re-pointed. Password recovery and OTP login look an
+// account up by social id value alone (see requestPasswordReset, loginOtp).
+const loginCapableSocialTypes = [SocialIdType.EMAIL, SocialIdType.HULY]
+
+/**
+ * Merging re-points the secondary person's social ids onto the primary person, so an unrestricted
+ * caller could both absorb the identifiers of a person they do not own and inject their own
+ * identifiers into somebody else's person. Restrict it to callers with authority over both persons.
+ */
+async function verifyMergePersonsAuthority (
+  db: AccountDB,
+  { account, workspace, extra }: Token,
+  primaryPerson: PersonUuid,
+  secondaryPerson: PersonUuid,
+  shouldThrow = true
+): Promise<boolean> {
+  // Global admins and the tool/workspace services act on behalf of the whole installation,
+  // the same way the account level merge (mergeSpecifiedAccounts) allows them to.
+  // Note this must precede the workspace check below: such tokens carry no workspace.
+  if (extra?.admin === 'true' || verifyAllowedServices(['tool', 'workspace'], extra, false)) {
+    return true
+  }
+
+  const forbidden = (): boolean => {
+    if (shouldThrow) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+    }
+
+    return false
+  }
+
+  // Everybody else acts within a single workspace they maintain.
+  if (workspace == null) {
+    return forbidden()
+  }
+
+  if (!verifyAllowedRole(await db.getWorkspaceRole(account, workspace), AccountRole.Maintainer, extra, false)) {
+    return forbidden()
+  }
+
+  // The platform wide accounts are not anybody's to merge.
+  for (const person of [primaryPerson, secondaryPerson]) {
+    if (person === systemAccountUuid || person === readOnlyGuestAccountUuid) {
+      return forbidden()
+    }
+
+    if ((await db.getWorkspaceRole(person as AccountUuid, workspace)) != null) {
+      // A member of the caller's workspace.
+      continue
+    }
+
+    if ((await db.account.findOne({ uuid: person as AccountUuid })) != null) {
+      // An account outside of the caller's workspace: no workspace maintainer may take it over.
+      return forbidden()
+    }
+  }
+
+  // Both persons are in reach of the caller by now, but the primary keeps receiving the secondary's
+  // social ids. When the primary is somebody else's account, a login capable social id would grant
+  // whoever controls it access to that account, so leave those merges to the verification flows.
+  // Note doMergePersons only refuses *verified* secondary social ids, which does not cover this.
+  if (primaryPerson !== account && (await db.account.findOne({ uuid: primaryPerson as AccountUuid })) != null) {
+    const secondarySocialIds = await db.socialId.find({ personUuid: secondaryPerson })
+
+    if (secondarySocialIds.some((si) => loginCapableSocialTypes.includes(si.type))) {
+      return forbidden()
+    }
+  }
+
+  return true
+}
+
 export async function canMergeSpecifiedPersons (
   ctx: MeasureContext,
   db: AccountDB,
@@ -2784,7 +2938,7 @@ export async function canMergeSpecifiedPersons (
     secondaryPerson: PersonUuid
   }
 ): Promise<boolean> {
-  decodeTokenVerbose(ctx, token)
+  const decodedToken = decodeTokenVerbose(ctx, token)
 
   const { primaryPerson, secondaryPerson } = params
   if (primaryPerson == null || primaryPerson === '' || secondaryPerson == null || secondaryPerson === '') {
@@ -2793,6 +2947,12 @@ export async function canMergeSpecifiedPersons (
 
   if (primaryPerson === secondaryPerson) {
     // Nothing to do
+    return false
+  }
+
+  // This is a predicate the merge dialog polls, so an unauthorized caller is answered
+  // rather than thrown at. mergeSpecifiedPersons below enforces the same rules.
+  if (!(await verifyMergePersonsAuthority(db, decodedToken, primaryPerson, secondaryPerson, false))) {
     return false
   }
 
@@ -2825,12 +2985,14 @@ export async function mergeSpecifiedPersons (
     secondaryPerson: PersonUuid
   }
 ): Promise<void> {
-  decodeTokenVerbose(ctx, token)
+  const decodedToken = decodeTokenVerbose(ctx, token)
 
   const { primaryPerson, secondaryPerson } = params
   if (primaryPerson == null || primaryPerson === '' || secondaryPerson == null || secondaryPerson === '') {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
+
+  await verifyMergePersonsAuthority(db, decodedToken, primaryPerson, secondaryPerson)
 
   await doMergePersons(db, primaryPerson, secondaryPerson)
 }
