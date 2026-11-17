@@ -103,22 +103,28 @@ The workflow also builds and pushes `kanbee-account` from the same commit, but `
 
 Upstream Huly only patches its latest release, so the pinned `0.7.413` base keeps account vulnerabilities that upstream fixed later. `kanbee-account` carries these upstream fixes as cherry-picks (`git cherry-pick -x`, so each commit names its source):
 
-| Upstream PR | Fix | Upstream release that contains it |
+| Upstream PR | Fix | First upstream tags that contain it |
 |---|---|---|
-| hcengineering/platform#10869 | `checkJoin` throws Forbidden for non-members | `s0.7.437` |
-| hcengineering/platform#10861 | `signUpJoin` requires email confirmation when `MAIL_URL` is set | `s0.7.437` |
-| hcengineering/platform#10997 | `mergeSpecifiedPersons` / `canMergeSpecifiedPersons` check authority (account takeover, hcengineering/platform#10914) | `s0.7.437` |
+| hcengineering/platform#10869 | `checkJoin` throws Forbidden for non-members | `s0.7.424`, `v0.7.426` |
+| hcengineering/platform#10861 | `signUpJoin` requires email confirmation when `MAIL_URL` is set | `s0.7.424`, `v0.7.426` |
+| hcengineering/platform#10997 | `mergeSpecifiedPersons` / `canMergeSpecifiedPersons` check authority (account takeover, hcengineering/platform#10914) | `s0.7.437` (no `v` tag yet) |
 | hcengineering/platform#11067 | `hasWorkspacePermission` no longer returns true for missing grants | `develop` only |
 | hcengineering/platform#11095 | `getMailboxSecret` enforces the `huly-mail` service check (hcengineering/platform#10862) | `develop` only |
 
 Apart from these backports, `server/account`, `server/account-service` and `pods/account` match upstream `s0.7.413` and `s0.7.418` (upstream made no account changes between those tags), except for Kanbee branding in the email templates and the 2FA app name. The account service does not use the platform queue, so the `pgqueue` routing does not affect it.
 
+Front-end companion fix (Kanbee-owned, not upstream): with `MAIL_URL` set, hcengineering/platform#10861 makes `signUpJoin` answer without a token until the email is confirmed, and upstream's invite page did not handle that (it called `logIn()`, which fails with 401). `plugins/login-resources/src/components/Join.svelte` now sends such answers to the "confirmation sent" page, like `SignupForm.svelte` already does; the confirmation link then finishes the workspace join. This fix ships in the `kanbee-front` image.
+
+Not backported yet: hcengineering/platform#10874 (`getAccountInfo` returned another account's timezone, locale and 2FA flag to any caller, fixed in `s0.7.437`). It also changes the contact model and front, so it has to ride on a full four-image deploy; pick it up with the next upstream upgrade or as its own backport.
+
 The account service owns the accounts database (users, workspaces, invites, social ids), so it is switched by hand, never by `deploy_to_railway`:
 
 1. Back up the accounts database (`DB_URL` of the account service) and confirm the backup restores.
-2. In staging, set the account service `source.image` to `ghcr.io/pinapple-org/kanbee-account:<version>-<sha>` (the immutable tag from the workflow summary).
-3. Smoke test staging: login, workspace selection, invite join, password recovery email.
-4. Repeat in production. To roll back, set the image back to the previous one: the backports add no database migrations.
+2. After the first workflow run that pushes `kanbee-account`, make the GHCR package readable by Railway the same way as the other `kanbee-*` packages (they are public), or add registry credentials to the account service. A new GHCR package starts private.
+3. If the account service has `MAIL_URL` set, deploy the four custom images from the same commit first (they carry the `Join.svelte` fix), otherwise invited sign-ups stall after submitting the form. Without `MAIL_URL` the account image can go alone.
+4. In staging, set the account service `source.image` to `ghcr.io/pinapple-org/kanbee-account:<version>-<sha>` (the immutable tag from the workflow summary).
+5. Smoke test staging: login, workspace selection, invite join for a new and for an existing user, password recovery email, and `select count(*) from global_account._account_applied_migrations` unchanged.
+6. Repeat in production. To roll back, set the image back to the previous one: the backports add no database migrations.
 
 ## Branding Source
 
