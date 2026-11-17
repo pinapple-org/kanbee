@@ -28,12 +28,14 @@
   import {
     checkJoined,
     getInviteWorkspaceName,
+    goTo,
     join,
     joinByToken,
     setLoginInfo,
     signUpJoin,
     getLoginInfo
   } from '../utils'
+  import { inviteJoinNextStep } from '../joinResult'
   import Form from './Form.svelte'
   import StatusControl from './StatusControl.svelte'
 
@@ -110,6 +112,11 @@
       status = loginStatus
 
       if (result != null) {
+        if (inviteJoinNextStep(result) === 'confirmEmail') {
+          goTo('confirmationSend')
+          return
+        }
+
         await logIn(result)
         setLoginInfo(result)
 
